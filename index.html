@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BackHurts — AI Posture Monitor</title>
+  <meta name="description" content="Real-time AI-powered posture detection system. Monitor your sitting posture via webcam and get instant corrective feedback." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Ambient background blobs -->
+  <div class="ambient-bg">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="16" cy="7" r="4" fill="currentColor"/>
+          <path d="M16 12 C10 12 7 17 8 24 L12 24 C11 19 13 17 16 17 C19 17 21 19 20 24 L24 24 C25 17 22 12 16 12Z" fill="currentColor"/>
+          <rect x="13" y="24" width="6" height="5" rx="1" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">BackHurts</span>
+        <span class="brand-tagline">AI Posture Monitor</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="live-badge" id="liveBadge">
+        <span class="live-dot"></span>
+        <span class="live-text">OFFLINE</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="icon-btn" id="settingsToggle" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="soundToggle" title="Toggle Sound" data-muted="false">
+        <svg id="soundIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main class="main">
+
+    <!-- LEFT: Camera Section -->
+    <section class="camera-section">
+      <div class="camera-card">
+        <div class="camera-header">
+          <span class="section-label">Live Feed</span>
+          <div class="fps-counter" id="fpsCounter">-- fps</div>
+        </div>
+        <div class="camera-viewport" id="cameraViewport">
+          <!-- Idle state -->
+          <div class="camera-idle" id="cameraIdle">
+            <div class="idle-icon">
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="14" width="56" height="40" rx="6" stroke="currentColor" stroke-width="2.5"/>
+                <circle cx="32" cy="34" r="10" stroke="currentColor" stroke-width="2.5"/>
+                <circle cx="32" cy="34" r="5" fill="currentColor" opacity="0.4"/>
+                <rect x="22" y="8" width="20" height="8" rx="3" stroke="currentColor" stroke-width="2.5"/>
+              </svg>
+            </div>
+            <p class="idle-title">Camera Inactive</p>
+            <p class="idle-sub">Click "Start Monitor" to begin</p>
+          </div>
+
+          <!-- Video + Canvas overlay -->
+          <video id="webcamVideo" autoplay playsinline muted></video>
+          <canvas id="overlayCanvas"></canvas>
+
+          <!-- Posture label overlay on video -->
+          <div class="posture-overlay-badge" id="postureOverlayBadge">
+            <span id="postureOverlayText">Detecting…</span>
+          </div>
+
+          <!-- Scanning animation -->
+          <div class="scan-line" id="scanLine"></div>
+        </div>
+
+        <div class="camera-controls">
+          <button class="btn btn-primary" id="startBtn">
+            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Start Monitor
+          </button>
+          <button class="btn btn-danger" id="stopBtn" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+            Stop
+          </button>
+          <button class="btn btn-ghost" id="snapshotBtn" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="1"/></svg>
+            Snapshot
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Dashboard Panel -->
+    <aside class="dashboard-panel">
+
+      <!-- Posture Status Card -->
+      <div class="status-card" id="statusCard">
+        <div class="status-header">
+          <span class="section-label">Posture Status</span>
+          <div class="confidence-pill" id="confidencePill">--.--%</div>
+        </div>
+        <div class="status-display" id="statusDisplay">
+          <div class="status-icon-wrap" id="statusIconWrap">
+            <svg class="status-icon" id="statusIcon" viewBox="0 0 80 80" fill="none">
+              <!-- idle posture icon -->
+              <circle cx="40" cy="18" r="10" stroke="currentColor" stroke-width="3" opacity="0.4"/>
+              <path d="M40 30 C28 30 22 40 24 58 L32 58 C30 46 34 40 40 40 C46 40 50 46 48 58 L56 58 C58 40 52 30 40 30Z" stroke="currentColor" stroke-width="3" fill="none" opacity="0.4"/>
+              <rect x="34" y="58" width="12" height="10" rx="2" stroke="currentColor" stroke-width="3" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="status-info">
+            <h2 class="status-label" id="statusLabel">Waiting…</h2>
+            <p class="status-sub" id="statusSub">Start the monitor to detect posture</p>
+          </div>
+        </div>
+
+        <!-- Confidence bar -->
+        <div class="confidence-bar-wrap">
+          <div class="confidence-bar-track">
+            <div class="confidence-bar-fill" id="confidenceBarFill" style="width:0%"></div>
+          </div>
+          <span class="confidence-bar-label">Confidence</span>
+        </div>
+      </div>
+
+      <!-- Session Stats Card -->
+      <div class="stats-card">
+        <div class="stats-header">
+          <span class="section-label">Session Stats</span>
+          <button class="mini-btn" id="resetStatsBtn">Reset</button>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item stat-good">
+            <div class="stat-value" id="goodTime">0:00</div>
+            <div class="stat-key">Good Posture</div>
+          </div>
+          <div class="stat-item stat-bad">
+            <div class="stat-value" id="badTime">0:00</div>
+            <div class="stat-key">Bad Posture</div>
+          </div>
+
+          <div class="stat-item stat-alerts">
+            <div class="stat-value" id="alertCount">0</div>
+            <div class="stat-key">Alerts Fired</div>
+          </div>
+        </div>
+
+
+      </div>
+
+      <!-- Alert Settings Card -->
+      <div class="settings-card" id="settingsCard">
+        <div class="settings-header">
+          <span class="section-label">Alert Settings</span>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label">Alert delay</label>
+          <div class="setting-control">
+            <input type="range" id="alertDelay" min="5" max="120" value="30" step="5" />
+            <span class="setting-val" id="alertDelayVal">30s</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label">Detection interval</label>
+          <div class="setting-control">
+            <input type="range" id="detectInterval" min="500" max="5000" value="1500" step="500" />
+            <span class="setting-val" id="detectIntervalVal">1.5s</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label">Min. confidence</label>
+          <div class="setting-control">
+            <input type="range" id="minConfidence" min="10" max="95" value="40" step="5" />
+            <span class="setting-val" id="minConfidenceVal">40%</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ── HISTORY / LOG STRIP ── -->
+  <section class="history-section">
+    <div class="history-header">
+      <span class="section-label">Detection Log</span>
+      <button class="mini-btn" id="clearLogBtn">Clear</button>
+    </div>
+    <div class="history-scroll" id="historyScroll">
+      <div class="history-empty" id="historyEmpty">No detections yet — start the monitor above</div>
+    </div>
+  </section>
+
+  <!-- ── ALERT TOAST ── -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ── BAD POSTURE ALERT OVERLAY ── -->
+  <div class="bad-posture-overlay" id="badPostureOverlay">
+    <div class="bad-overlay-content">
+      <div class="bad-overlay-icon">⚠️</div>
+      <h3>Bad Posture Detected!</h3>
+      <p>Please sit up straight and correct your posture.</p>
+      <button class="btn btn-primary" id="dismissOverlay">Got it!</button>
+    </div>
+  </div>
+
+  <!-- Hidden canvas for inference frames -->
+  <canvas id="inferenceCanvas" style="display:none"></canvas>
+
+  <script src="app.js"></script>
+</body>
+</html>
