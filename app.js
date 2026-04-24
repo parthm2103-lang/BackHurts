@@ -404,7 +404,13 @@ async function runInference() {
 
     const minConf = parseInt(minConfidenceEl.value) / 100;
     if (topClass && topConf >= minConf) {
-      const cls = classifyPosture(topClass);
+      // If model says 'good' but confidence < 50%, downgrade to 'warn'
+      // A low-confidence good reading should NOT count as confirmed good posture
+      let cls = classifyPosture(topClass);
+      if (cls === 'good' && topConf < 0.50) {
+        cls = 'warn';
+        console.log(`[BackHurts] Low-confidence good (${(topConf*100).toFixed(1)}%) → downgraded to warn`);
+      }
       const friendlyLabel = POSTURE_CONFIG[cls].label;
       console.log(`[BackHurts] Detected: "${topClass}" → classified as "${cls}" (conf: ${(topConf*100).toFixed(1)}%)`);
       updateStatus(cls, friendlyLabel, topConf);
