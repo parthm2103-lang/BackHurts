@@ -416,23 +416,21 @@ async function runInference() {
       if (cls === 'good') { goodSec++; consecutiveBadSec = 0; }
       else                { badSec++;  consecutiveBadSec++; }
 
-      // ── Session posture quality override ──────────────────────────
-      // If overall good-posture % falls below threshold, override status
-      const totalSec = goodSec + badSec;
-      if (totalSec >= 5) {                      // wait at least 5s of data
-        const goodPct = (goodSec / totalSec) * 100;
-        if (goodPct < 45) {
-          // Below 45% good → force Bad Posture display
-          updateStatus('bad', 'Bad Posture!', topConf);
-          statusSub.textContent = `Only ${goodPct.toFixed(0)}% good posture this session — sit up straight!`;
-        } else if (goodPct < 50) {
-          // 45–50% good → Needs Improvement warning
-          updateStatus('warn', 'Needs Improvement', topConf);
-          statusSub.textContent = `Only ${goodPct.toFixed(0)}% good posture this session — try to sit straighter!`;
-        } else {
-          // >= 50% good → show real detection result + session %
-          statusSub.textContent = POSTURE_CONFIG[cls].sub + ` (Session: ${goodPct.toFixed(0)}% good)`;
-        }
+      // ── Confidence-based posture status override ───────────────────
+      // Regardless of model class, use confidence % to set severity:
+      //   ≥ 60% → Good Posture
+      //   40–59% → Needs Improvement
+      //   < 40% → Bad Posture
+      const confPct = topConf * 100;
+      if (confPct >= 60) {
+        updateStatus('good', 'Good Posture', topConf);
+        statusSub.textContent = `Great! Confidence ${confPct.toFixed(0)}% — keep it up!`;
+      } else if (confPct >= 40) {
+        updateStatus('warn', 'Needs Improvement', topConf);
+        statusSub.textContent = `Posture score ${confPct.toFixed(0)}% — try to sit up straighter!`;
+      } else {
+        updateStatus('bad', 'Bad Posture!', topConf);
+        statusSub.textContent = `Posture score only ${confPct.toFixed(0)}% — please correct your posture now!`;
       }
 
       // Alert logic — fire priority alert
