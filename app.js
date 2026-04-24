@@ -411,26 +411,29 @@ async function runInference() {
       updateStatus(cls, friendlyLabel, topConf);
       addHistoryChip(cls, friendlyLabel, topConf);
 
-      // Stats tracking — warn counts as bad for alert purposes
+      // Stats tracking
       lastPostureClass = cls;
       if (cls === 'good') { goodSec++; consecutiveBadSec = 0; }
       else                { badSec++;  consecutiveBadSec++; }
 
-      // ── Confidence-based posture status override ───────────────────
-      // Regardless of model class, use confidence % to set severity:
-      //   ≥ 60% → Good Posture
-      //   40–59% → Needs Improvement
-      //   < 40% → Bad Posture
-      const confPct = topConf * 100;
-      if (confPct >= 60) {
-        updateStatus('good', 'Good Posture', topConf);
-        statusSub.textContent = `Great! Confidence ${confPct.toFixed(0)}% — keep it up!`;
-      } else if (confPct >= 40) {
-        updateStatus('warn', 'Needs Improvement', topConf);
-        statusSub.textContent = `Posture score ${confPct.toFixed(0)}% — try to sit up straighter!`;
-      } else {
-        updateStatus('bad', 'Bad Posture!', topConf);
-        statusSub.textContent = `Posture score only ${confPct.toFixed(0)}% — please correct your posture now!`;
+      // ── Session Posture Status Override ────────────────────────────
+      // Based on the RATIO of good time vs bad time in this session:
+      //   ≥ 60% good → Good Posture
+      //   40–59% good → Needs Improvement
+      //   < 40% good → Bad Posture
+      const totalSec = goodSec + badSec;
+      if (totalSec >= 3) {
+        const goodPct = (goodSec / totalSec) * 100;
+        if (goodPct >= 60) {
+          updateStatus('good', 'Good Posture', topConf);
+          statusSub.textContent = `Session: ${goodPct.toFixed(0)}% good posture — keep it up!`;
+        } else if (goodPct >= 40) {
+          updateStatus('warn', 'Needs Improvement', topConf);
+          statusSub.textContent = `Session: only ${goodPct.toFixed(0)}% good posture — try to sit straighter!`;
+        } else {
+          updateStatus('bad', 'Bad Posture!', topConf);
+          statusSub.textContent = `Session: only ${goodPct.toFixed(0)}% good posture — correct your posture now!`;
+        }
       }
 
       // Alert logic — fire priority alert
