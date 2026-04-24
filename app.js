@@ -51,7 +51,11 @@ const minConfidenceV  = document.getElementById('minConfidenceVal');
 const historyScroll   = document.getElementById('historyScroll');
 const historyEmpty    = document.getElementById('historyEmpty');
 const toastContainer  = document.getElementById('toastContainer');
-const badOverlay      = document.getElementById('badPostureOverlay');
+const badOverlay       = document.getElementById('badPostureOverlay');
+const warningBar       = document.getElementById('postureWarningBar');
+const warningBarText   = document.getElementById('warningBarText');
+const dismissWarningBarBtn = document.getElementById('dismissWarningBar');
+const snoozeOverlayBtn = document.getElementById('snoozeOverlay');
 
 const overlayCtx      = overlayCanvas.getContext('2d');
 const inferCtx        = inferCanvas.getContext('2d');
@@ -62,6 +66,7 @@ let detectLoop    = null;
 let statsLoop     = null;
 let isMuted       = false;
 let isRunning     = false;
+let snoozedUntil  = 0;   // timestamp until which alerts are snoozed
 
 let goodSec       = 0;    // seconds in good posture
 let badSec        = 0;    // seconds in bad/warn posture
@@ -157,6 +162,52 @@ const POSTURE_CONFIG = {
 // ── ICONS ───────────────────────────────────────────────────────
 const SOUND_ON_SVG  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
 const SOUND_OFF_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+
+// ── BROWSER NOTIFICATION PERMISSION ────────────────────────────
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+function sendBrowserNotification(title, body) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    const n = new Notification(title, {
+      body,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">🦴</text></svg>',
+      badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">⚠️</text></svg>',
+      requireInteraction: true,   // stays until user interacts
+      tag: 'backhurts-posture',   // replaces previous notif instead of stacking
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+  }
+}
+
+// ── PRIORITY ALERT (all layers at once) ─────────────────────────
+function showPriorityAlert(cls, durationSec) {
+  if (Date.now() < snoozedUntil) return;   // respect snooze
+
+  const msg = cls === 'bad'
+    ? `You've been in bad posture for ${durationSec}s — sit up straight!`
+    : `Posture needs improvement for ${durationSec}s — adjust your position!`;
+
+  // 1. OS / Browser notification (works even when tab is minimised)
+  sendBrowserNotification('🚨 BackHurts — Posture Alert!', msg);
+
+  // 2. Persistent top warning bar
+  warningBarText.textContent = `⚠️ ${cls === 'bad' ? 'BAD POSTURE' : 'NEEDS IMPROVEMENT'} — ${msg}`;
+  warningBar.classList.add('show');
+
+  // 3. Full-screen priority overlay
+  badOverlay.classList.add('show');
+
+  // 4. Sound
+  playBeep();
+
+  // 5. In-app toast
+  showToast('Posture Alert!', msg, 'bad', 6000);
+
+  alertFired++;
+  updateStatsDisplay();
+}
 
 // ── AUDIO ALERT ─────────────────────────────────────────────────
 function playBeep() {
@@ -383,15 +434,10 @@ async function runInference() {
         }
       }
 
-      // Alert logic
+      // Alert logic — fire priority alert
       const alertDelay = parseInt(alertDelayEl.value);
       if (consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
-        alertFired++;
-        playBeep();
-        showToast('Posture Alert!', `You've been in ${cls === 'bad' ? 'bad' : 'poor'} posture for ${consecutiveBadSec}s.`, 'bad', 6000);
-        if (consecutiveBadSec === alertDelay) {
-          badOverlay.classList.add('show');
-        }
+        showPriorityAlert(cls, consecutiveBadSec);
       }
     } else if (topClass && topConf < minConf) {
       statusSub.textContent = `Low confidence (${(topConf*100).toFixed(0)}%) — adjust camera angle`;
@@ -538,7 +584,23 @@ startBtn.addEventListener('click', startMonitor);
 stopBtn.addEventListener('click', stopMonitor);
 snapshotBtn.addEventListener('click', takeSnapshot);
 resetStatsBtn.addEventListener('click', resetStats);
-dismissOverlay.addEventListener('click', () => badOverlay.classList.remove('show'));
+
+// Dismiss overlay + bar
+dismissOverlay.addEventListener('click', () => {
+  badOverlay.classList.remove('show');
+  warningBar.classList.remove('show');
+});
+
+// Snooze 2 minutes
+snoozeOverlayBtn.addEventListener('click', () => {
+  snoozedUntil = Date.now() + 2 * 60 * 1000;
+  badOverlay.classList.remove('show');
+  warningBar.classList.remove('show');
+  showToast('Snoozed', 'Alerts snoozed for 2 minutes.', 'info', 3000);
+});
+
+// Dismiss just the bar
+dismissWarningBarBtn.addEventListener('click', () => warningBar.classList.remove('show'));
 
 clearLogBtn.addEventListener('click', () => {
   historyScroll.innerHTML = '';
@@ -551,7 +613,10 @@ clearLogBtn.addEventListener('click', () => {
 
 // Close bad overlay on backdrop click
 badOverlay.addEventListener('click', (e) => {
-  if (e.target === badOverlay) badOverlay.classList.remove('show');
+  if (e.target === badOverlay) {
+    badOverlay.classList.remove('show');
+    warningBar.classList.remove('show');
+  }
 });
 
 // ── INIT ─────────────────────────────────────────────────────────

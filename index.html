@@ -215,13 +215,29 @@
   <!-- ── ALERT TOAST ── -->
   <div class="toast-container" id="toastContainer"></div>
 
+  <!-- ── PERSISTENT TOP WARNING BAR ── -->
+  <div class="posture-warning-bar" id="postureWarningBar">
+    <span class="bar-icon">🦴</span>
+    <span id="warningBarText">⚠️ BAD POSTURE DETECTED — Sit up straight now!</span>
+    <button class="bar-dismiss" id="dismissWarningBar">Dismiss</button>
+  </div>
+
   <!-- ── BAD POSTURE ALERT OVERLAY ── -->
   <div class="bad-posture-overlay" id="badPostureOverlay">
     <div class="bad-overlay-content">
-      <div class="bad-overlay-icon">⚠️</div>
-      <h3>Bad Posture Detected!</h3>
-      <p>Please sit up straight and correct your posture.</p>
-      <button class="btn btn-primary" id="dismissOverlay">Got it!</button>
+      <span class="bad-overlay-icon">🚨</span>
+      <h3>Bad Posture Alert!</h3>
+      <p>You've been slouching. Fix your posture now to avoid back pain.</p>
+      <ul class="bad-overlay-tips">
+        <li>Sit with your back straight against the chair</li>
+        <li>Keep your shoulders relaxed, not hunched</li>
+        <li>Position screen at eye level</li>
+        <li>Feet flat on the floor</li>
+      </ul>
+      <div class="overlay-actions">
+        <button class="btn-dismiss-overlay" id="dismissOverlay">✅ I've fixed it!</button>
+        <button class="btn-snooze" id="snoozeOverlay">Snooze 2 min</button>
+      </div>
     </div>
   </div>
 
