@@ -4,7 +4,7 @@
    ================================================================ */
 
 const API_KEY   = 'odybs5xgBZ0Vixi1EfCb';
-const MODEL_ID  = 'backhurts/1';
+const MODEL_ID  = 'backhurts/2';
 const API_URL   = `https://serverless.roboflow.com/${MODEL_ID}?api_key=${API_KEY}`;
 
 // ── DOM REFS ────────────────────────────────────────────────────
@@ -89,8 +89,9 @@ function classifyPosture(rawClass) {
   const raw = (rawClass || '').trim();
 
   // ── Numeric class ID (highest priority) ───────────────────────
-  // 0 = Bad Posture, 1 = Good Posture, 2 = Needs Correction, 3 = Bad Posture
-  const numericMap = { '0': 'bad', '1': 'good', '2': 'warn', '3': 'bad' };
+  // UPDATED: Mapping for Version 2 (Retrained)
+  // 0 = Good Posture, 1 = Bad Posture, 2 = Neutral/Side, 3 = Partial
+  const numericMap = { '0': 'good', '1': 'bad', '2': 'warn', '3': 'bad' };
   if (numericMap[raw] !== undefined) return numericMap[raw];
 
   // ── Text keyword fallback ──────────────────────────────────────
@@ -411,18 +412,14 @@ async function runInference() {
       updateStatus(cls, friendlyLabel, topConf);
       addHistoryChip(cls, friendlyLabel, topConf);
 
-      // ── Confidence-based posture status override ───────────────────
-      // (This was the logic that provided 90-95% accuracy in the original version)
+      // --- DETECTION FEEDBACK ---
       const confPct = topConf * 100;
-      if (confPct >= 60) {
-        updateStatus('good', 'Good Posture', topConf);
-        statusSub.textContent = `Great! Confidence ${confPct.toFixed(0)}% — keep it up!`;
-      } else if (confPct >= 40) {
-        updateStatus('warn', 'Needs Improvement', topConf);
-        statusSub.textContent = `Posture score ${confPct.toFixed(0)}% — try to sit up straighter!`;
+      if (cls === 'good') {
+        statusSub.textContent = `Great! ${confPct.toFixed(0)}% confident you are sitting straight.`;
+      } else if (cls === 'warn') {
+        statusSub.textContent = `Needs Correction (${confPct.toFixed(0)}%). Please adjust your back.`;
       } else {
-        updateStatus('bad', 'Bad Posture!', topConf);
-        statusSub.textContent = `Posture score only ${confPct.toFixed(0)}% — please correct your posture now!`;
+        statusSub.textContent = `Bad Posture detected (${confPct.toFixed(0)}%). Please sit up!`;
       }
 
       // Stats tracking
