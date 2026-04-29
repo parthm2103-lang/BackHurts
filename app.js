@@ -73,6 +73,7 @@ let badSec        = 0;    // seconds in bad/warn posture
 let alertFired    = 0;
 let consecutiveBadSec = 0;
 let lastPostureClass  = null;
+const GOOD_POSTURE_BIAS = 0.05; // Gentle bias: +5% confidence for good posture
 
 let fpsFrames     = 0;
 let fpsTime       = Date.now();
@@ -404,36 +405,43 @@ async function runInference() {
     }
 
     const minConf = parseInt(minConfidenceEl.value) / 100;
-    if (topClass && topConf >= minConf) {
-      // Classify posture from model result
-      const cls = classifyPosture(topClass);
-      const friendlyLabel = POSTURE_CONFIG[cls].label;
-      console.log(`[BackHurts] Detected: "${topClass}" → classified as "${cls}" (conf: ${(topConf*100).toFixed(1)}%)`);
-      updateStatus(cls, friendlyLabel, topConf);
-      addHistoryChip(cls, friendlyLabel, topConf);
+    if (topClass) {
+      let cls = classifyPosture(topClass);
+      let adjustedConf = topConf;
 
-      // --- DETECTION FEEDBACK ---
-      const confPct = topConf * 100;
-      if (cls === 'good') {
-        statusSub.textContent = `Great! ${confPct.toFixed(0)}% confident you are sitting straight.`;
-      } else if (cls === 'warn') {
-        statusSub.textContent = `Needs Correction (${confPct.toFixed(0)}%). Please adjust your back.`;
-      } else {
-        statusSub.textContent = `Bad Posture detected (${confPct.toFixed(0)}%). Please sit up!`;
+      // Apply gentle Good Posture bias (5%)
+      if (cls === 'good') adjustedConf += GOOD_POSTURE_BIAS;
+
+      if (adjustedConf >= minConf) {
+        const friendlyLabel = POSTURE_CONFIG[cls].label;
+        console.log(`[BackHurts] Detected: "${topClass}" → "${cls}" (Adjusted: ${(adjustedConf*100).toFixed(1)}%)`);
+        
+        updateStatus(cls, friendlyLabel, adjustedConf);
+        addHistoryChip(cls, friendlyLabel, adjustedConf);
+
+        // --- DETECTION FEEDBACK ---
+        const confPct = adjustedConf * 100;
+        if (cls === 'good') {
+          statusSub.textContent = `Great! ${confPct.toFixed(0)}% confident you are sitting straight.`;
+        } else if (cls === 'warn') {
+          statusSub.textContent = `Needs Correction (${confPct.toFixed(0)}%). Please adjust your back.`;
+        } else {
+          statusSub.textContent = `Bad Posture detected (${confPct.toFixed(0)}%). Please sit up!`;
+        }
+
+        // Stats tracking
+        lastPostureClass = cls;
+        if (cls === 'good') { goodSec++; consecutiveBadSec = 0; }
+        else                { badSec++;  consecutiveBadSec++; }
+
+        // Alert logic
+        const alertDelay = parseInt(alertDelayEl.value);
+        if (consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
+          showPriorityAlert(cls, consecutiveBadSec);
+        }
+      } else if (adjustedConf < minConf) {
+        statusSub.textContent = `Low confidence (${(adjustedConf*100).toFixed(0)}%) — adjust camera angle`;
       }
-
-      // Stats tracking
-      lastPostureClass = cls;
-      if (cls === 'good') { goodSec++; consecutiveBadSec = 0; }
-      else                { badSec++;  consecutiveBadSec++; }
-
-      // Alert logic
-      const alertDelay = parseInt(alertDelayEl.value);
-      if (consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
-        showPriorityAlert(cls, consecutiveBadSec);
-      }
-    } else if (topClass && topConf < minConf) {
-      statusSub.textContent = `Low confidence (${(topConf*100).toFixed(0)}%) — adjust camera angle`;
     }
 
     updateStatsDisplay();
