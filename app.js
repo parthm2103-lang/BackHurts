@@ -76,7 +76,7 @@ let lastPostureClass  = null;  // tracks current posture for the 1s stats timer
 
 // Stability buffer to prevent flickering alerts
 let stabilityCount = 0;
-const STABILITY_THRESHOLD = 3; // Must detect bad posture 3 times in a row to start the timer
+const STABILITY_THRESHOLD = 5; // More lenient: Must detect bad posture 5 times in a row to start the timer
 
 let fpsFrames     = 0;
 let fpsTime       = Date.now();
@@ -499,7 +499,12 @@ async function startMonitor() {
         goodSec++;
       } else if (lastPostureClass === 'bad' || lastPostureClass === 'warn') {
         badSec++;
-        consecutiveBadSec++;
+        // Only increment the alert timer for 'bad' posture, not 'warn' (leniency)
+        if (lastPostureClass === 'bad') {
+          consecutiveBadSec++;
+        } else {
+          consecutiveBadSec = 0; // Reset alert timer if just a 'warn'
+        }
       }
       updateStatsDisplay();
     }, 1000);
