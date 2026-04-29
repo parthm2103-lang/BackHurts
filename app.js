@@ -74,6 +74,10 @@ let alertFired    = 0;
 let consecutiveBadSec = 0;
 let lastPostureClass  = null;  // tracks current posture for the 1s stats timer
 
+// Stability buffer to prevent flickering alerts
+let stabilityCount = 0;
+const STABILITY_THRESHOLD = 3; // Must detect bad posture 3 times in a row to start the timer
+
 let fpsFrames     = 0;
 let fpsTime       = Date.now();
 let lastDetectTime= 0;
@@ -89,8 +93,9 @@ function classifyPosture(rawClass) {
   const raw = (rawClass || '').trim();
 
   // ── Numeric class ID (highest priority) ───────────────────────
-  // 0 = Bad Posture, 1 = Good Posture, 2 = Needs Correction, 3 = Bad Posture
-  const numericMap = { '0': 'bad', '1': 'good', '2': 'warn', '3': 'bad' };
+  // UPDATED: Standard mapping for backhurts/1
+  // 0 = Good Posture, 1 = Bad Posture, 2 = Needs Correction, 3 = Bad Posture
+  const numericMap = { '0': 'good', '1': 'bad', '2': 'warn', '3': 'bad' };
   if (numericMap[raw] !== undefined) return numericMap[raw];
 
   // ── Text keyword fallback ──────────────────────────────────────
@@ -408,21 +413,38 @@ async function runInference() {
       const cls = classifyPosture(topClass);
       const friendlyLabel = POSTURE_CONFIG[cls].label;
       console.log(`[BackHurts] Detected: "${topClass}" → classified as "${cls}" (conf: ${(topConf*100).toFixed(1)}%)`);
+      
       updateStatus(cls, friendlyLabel, topConf);
       addHistoryChip(cls, friendlyLabel, topConf);
 
-      // Track current posture class for the 1-second stats timer
-      lastPostureClass = cls;
+      // Add debugging info to the sub-text
+      statusSub.textContent += ` [Raw: ${topClass}]`;
 
-      // Reset consecutive bad counter when posture is good
+      // --- STABILITY & ALERT LOGIC ---
       if (cls === 'good') {
+        stabilityCount = 0;
         consecutiveBadSec = 0;
+        lastPostureClass = 'good';
+      } else {
+        // Increment stability buffer for bad/warn posture
+        stabilityCount++;
+        
+        // Only start counting "consecutive seconds" if detection is stable
+        if (stabilityCount >= STABILITY_THRESHOLD) {
+          lastPostureClass = cls;
+        } else {
+          // System is still "waiting" for stability, treat as good for timers
+          lastPostureClass = 'good';
+        }
       }
 
-      // Alert logic — fire priority alert after sustained bad/warn posture
+      // Alert logic — fire priority alert after sustained BAD posture
+      // (Warn only triggers toast, Bad triggers the full overlay)
       const alertDelay = parseInt(alertDelayEl.value);
-      if (cls !== 'good' && consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
+      if (cls === 'bad' && consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
         showPriorityAlert(cls, consecutiveBadSec);
+      } else if (cls === 'warn' && stabilityCount === STABILITY_THRESHOLD) {
+        showToast('Posture Warning', 'Minor correction needed.', 'warn', 3000);
       }
     } else if (topClass && topConf < minConf) {
       statusSub.textContent = `Low confidence (${(topConf*100).toFixed(0)}%) — adjust camera angle`;
