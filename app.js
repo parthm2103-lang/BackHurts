@@ -72,7 +72,7 @@ let goodSec       = 0;    // seconds in good posture
 let badSec        = 0;    // seconds in bad/warn posture
 let alertFired    = 0;
 let consecutiveBadSec = 0;
-let lastPostureClass  = null;
+let lastPostureClass  = null;  // tracks current posture for the 1s stats timer
 
 let fpsFrames     = 0;
 let fpsTime       = Date.now();
@@ -411,34 +411,17 @@ async function runInference() {
       updateStatus(cls, friendlyLabel, topConf);
       addHistoryChip(cls, friendlyLabel, topConf);
 
-      // Stats tracking
+      // Track current posture class for the 1-second stats timer
       lastPostureClass = cls;
-      if (cls === 'good') { goodSec++; consecutiveBadSec = 0; }
-      else                { badSec++;  consecutiveBadSec++; }
 
-      // ── Session Posture Status Override ────────────────────────────
-      // Based on the RATIO of good time vs bad time in this session:
-      //   ≥ 60% good → Good Posture
-      //   40–59% good → Needs Improvement
-      //   < 40% good → Bad Posture
-      const totalSec = goodSec + badSec;
-      if (totalSec >= 3) {
-        const goodPct = (goodSec / totalSec) * 100;
-        if (goodPct >= 60) {
-          updateStatus('good', 'Good Posture', topConf);
-          statusSub.textContent = `Session: ${goodPct.toFixed(0)}% good posture — keep it up!`;
-        } else if (goodPct >= 40) {
-          updateStatus('warn', 'Needs Improvement', topConf);
-          statusSub.textContent = `Session: only ${goodPct.toFixed(0)}% good posture — try to sit straighter!`;
-        } else {
-          updateStatus('bad', 'Bad Posture!', topConf);
-          statusSub.textContent = `Session: only ${goodPct.toFixed(0)}% good posture — correct your posture now!`;
-        }
+      // Reset consecutive bad counter when posture is good
+      if (cls === 'good') {
+        consecutiveBadSec = 0;
       }
 
-      // Alert logic — fire priority alert
+      // Alert logic — fire priority alert after sustained bad/warn posture
       const alertDelay = parseInt(alertDelayEl.value);
-      if (consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
+      if (cls !== 'good' && consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
         showPriorityAlert(cls, consecutiveBadSec);
       }
     } else if (topClass && topConf < minConf) {
@@ -489,8 +472,16 @@ async function startMonitor() {
     const interval = parseInt(detectIntervalEl.value);
     detectLoop = setInterval(runInference, interval);
 
-    // Stats ticker (1 second)
-    statsLoop = setInterval(updateStatsDisplay, 1000);
+    // Stats ticker — counts actual seconds spent in each posture
+    statsLoop = setInterval(() => {
+      if (lastPostureClass === 'good') {
+        goodSec++;
+      } else if (lastPostureClass === 'bad' || lastPostureClass === 'warn') {
+        badSec++;
+        consecutiveBadSec++;
+      }
+      updateStatsDisplay();
+    }, 1000);
 
   } catch(err) {
     showToast('Camera Error', err.message || 'Could not access webcam.', 'bad', 6000);
@@ -573,10 +564,6 @@ minConfidenceEl.addEventListener('input', () => {
 // ── SOUND TOGGLE ────────────────────────────────────────────────
 soundToggle.addEventListener('click', () => {
   isMuted = !isMuted;
-  soundIcon.innerHTML = isMuted
-    ? `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>`
-    : `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>`;
-  // re-wrap with proper svg tag
   soundToggle.innerHTML = isMuted ? SOUND_OFF_SVG : SOUND_ON_SVG;
   soundToggle.setAttribute('title', isMuted ? 'Unmute alerts' : 'Mute alerts');
 });
