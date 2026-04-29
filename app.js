@@ -84,18 +84,17 @@ let lastDetectTime= 0;
 
 // Posture class → display config
 // PRIMARY: Numeric class ID mapping (specific to the backhurts/1 model)
-//   Class 0 = Good Posture (sitting straight/upright)
-//   Class 1 = Bad Posture  (slouching / hunching)
-//   Class 2 = Needs Correction (rounded back, moderate hunch)
-//   Class 3 = Bad Posture  (leaning forward aggressively)
+//   Class 2 = Good Posture (sitting straight/upright) - BASED ON USER FEEDBACK
+//   Class 1 = Needs Correction
+//   Class 0 = Bad Posture
+//   Class 3 = Bad Posture (leaning forward)
 // SECONDARY: text keyword matching as a universal fallback
 function classifyPosture(rawClass) {
   const raw = (rawClass || '').trim();
 
   // ── Numeric class ID (highest priority) ───────────────────────
-  // UPDATED: Standard mapping for backhurts/1
-  // 0 = Good Posture, 1 = Bad Posture, 2 = Needs Correction, 3 = Bad Posture
-  const numericMap = { '0': 'good', '1': 'bad', '2': 'warn', '3': 'bad' };
+  // UPDATED mapping based on user's real-world results:
+  const numericMap = { '0': 'bad', '1': 'warn', '2': 'good', '3': 'bad' };
   if (numericMap[raw] !== undefined) return numericMap[raw];
 
   // ── Text keyword fallback ──────────────────────────────────────
@@ -327,7 +326,7 @@ function drawBoxes(predictions, vidW, vidH) {
     overlayCtx.shadowBlur  = 0;
 
     // Label background
-    const label = `${pred.class} ${(pred.confidence*100).toFixed(0)}%`;
+    const label = `ID:${pred.class} — ${(pred.confidence*100).toFixed(0)}%`;
     overlayCtx.font = 'bold 13px Inter, sans-serif';
     const tw = overlayCtx.measureText(label).width;
     overlayCtx.fillStyle = cfg.overlayColor + 'cc';
