@@ -76,7 +76,9 @@ let lastPostureClass  = null;  // tracks current posture for the 1s stats timer
 
 // Stability buffer to prevent flickering alerts
 let stabilityCount = 0;
-const STABILITY_THRESHOLD = 5; // More lenient: Must detect bad posture 5 times in a row to start the timer
+const STABILITY_THRESHOLD = 5; 
+const GOOD_CONFIDENCE_BOOST = 0.10; // Bias: Add 10% confidence to 'good' detections
+const STICKINESS_THRESHOLD = 0.15;  // Bias: Require 15% higher confidence to switch from Good to Bad
 
 let fpsFrames     = 0;
 let fpsTime       = Date.now();
@@ -406,47 +408,63 @@ async function runInference() {
       }
     }
 
-    const minConf = parseInt(minConfidenceEl.value) / 100;
-    if (topClass && topConf >= minConf) {
-      // Classify posture from model result
-      const cls = classifyPosture(topClass);
-      const friendlyLabel = POSTURE_CONFIG[cls].label;
-      console.log(`[BackHurts] Detected: "${topClass}" → classified as "${cls}" (conf: ${(topConf*100).toFixed(1)}%)`);
-      
-      updateStatus(cls, friendlyLabel, topConf);
-      addHistoryChip(cls, friendlyLabel, topConf);
+    const minConfSetting = parseInt(minConfidenceEl.value) / 100;
+    
+    if (topClass) {
+      let cls = classifyPosture(topClass);
+      let adjustedConf = topConf;
 
-      // Add debugging info to the sub-text
-      statusSub.textContent += ` [Raw: ${topClass}]`;
-
-      // --- STABILITY & ALERT LOGIC ---
+      // --- POSTURE BIAS LOGIC ---
+      // 1. Artificially boost confidence of 'good' detections
       if (cls === 'good') {
-        stabilityCount = 0;
-        consecutiveBadSec = 0;
-        lastPostureClass = 'good';
-      } else {
-        // Increment stability buffer for bad/warn posture
-        stabilityCount++;
+        adjustedConf += GOOD_CONFIDENCE_BOOST;
+      }
+
+      // 2. State Stickiness: If we are currently GOOD, require a higher threshold to switch to BAD
+      let effectiveMinConf = minConfSetting;
+      if (lastPostureClass === 'good' && cls !== 'good') {
+        effectiveMinConf += STICKINESS_THRESHOLD;
+      }
+
+      if (adjustedConf >= effectiveMinConf) {
+        const friendlyLabel = POSTURE_CONFIG[cls].label;
+        console.log(`[BackHurts] "${topClass}" → "${cls}" (Adjusted Conf: ${(adjustedConf*100).toFixed(1)}%)`);
         
-        // Only start counting "consecutive seconds" if detection is stable
-        if (stabilityCount >= STABILITY_THRESHOLD) {
-          lastPostureClass = cls;
-        } else {
-          // System is still "waiting" for stability, treat as good for timers
+        updateStatus(cls, friendlyLabel, adjustedConf);
+        addHistoryChip(cls, friendlyLabel, adjustedConf);
+
+        // Add debugging info
+        statusSub.textContent += ` [Raw: ${topClass}]`;
+
+        // --- STABILITY & ALERT LOGIC ---
+        if (cls === 'good') {
+          stabilityCount = 0;
+          consecutiveBadSec = 0;
           lastPostureClass = 'good';
+        } else {
+          stabilityCount++;
+          if (stabilityCount >= STABILITY_THRESHOLD) {
+            lastPostureClass = cls;
+          } else {
+            lastPostureClass = 'good';
+          }
+        }
+
+        // Alert logic
+        const alertDelay = parseInt(alertDelayEl.value);
+        if (cls === 'bad' && consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
+          showPriorityAlert(cls, consecutiveBadSec);
+        } else if (cls === 'warn' && stabilityCount === STABILITY_THRESHOLD) {
+          showToast('Posture Warning', 'Minor correction needed.', 'warn', 3000);
+        }
+      } else {
+        // Not enough confidence to change state, default to good if we were already good
+        if (lastPostureClass === 'good') {
+          statusSub.textContent = `Maintaining Good Posture (Low confidence detection ignored)`;
+        } else {
+          statusSub.textContent = `Low confidence (${(adjustedConf*100).toFixed(0)}%) — adjust camera angle`;
         }
       }
-
-      // Alert logic — fire priority alert after sustained BAD posture
-      // (Warn only triggers toast, Bad triggers the full overlay)
-      const alertDelay = parseInt(alertDelayEl.value);
-      if (cls === 'bad' && consecutiveBadSec >= alertDelay && consecutiveBadSec % alertDelay === 0) {
-        showPriorityAlert(cls, consecutiveBadSec);
-      } else if (cls === 'warn' && stabilityCount === STABILITY_THRESHOLD) {
-        showToast('Posture Warning', 'Minor correction needed.', 'warn', 3000);
-      }
-    } else if (topClass && topConf < minConf) {
-      statusSub.textContent = `Low confidence (${(topConf*100).toFixed(0)}%) — adjust camera angle`;
     }
 
     updateStatsDisplay();
